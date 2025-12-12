@@ -19,7 +19,9 @@ The configuration file contains several sections:
 LLM Configuration
 ~~~~~~~~~~~~~~~
 - ``fast_llm_provider``: Provider for quick LLM operations (options: 'openai', 'google', 'anthropic')
-- ``long_context_llm_provider``: Provider for operations requiring longer context
+- ``long_context_llm_provider``: Provider for operations requiring longer context (options: 'openai', 'google', 'anthropic', 'moonshot')
+
+Note: The 'moonshot' provider uses Kimi K2 from Moonshot AI, which is optimized for long context tasks.
 
 Text-to-Speech Configuration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~ 
