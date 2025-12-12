@@ -54,6 +54,7 @@ class PodcastConfig:
         openai_api_key (str): API key for OpenAI services
         tavily_api_key (str): API key for Tavily search
         anthropic_api_key (str): API key for Anthropic services
+        moonshot_api_key (str): API key for Moonshot AI (Kimi K2)
         fast_llm_provider (str): Provider to use for quick LLM operations
         long_context_llm_provider (str): Provider to use for long context operations
         tts_provider (str): Text-to-speech service provider
@@ -75,6 +76,7 @@ class PodcastConfig:
     openai_api_key: str
     tavily_api_key: str
     anthropic_api_key: str
+    moonshot_api_key: Optional[str]
 
     # LLM config
     fast_llm_provider: str
@@ -124,12 +126,21 @@ class PodcastConfig:
             'ANTHROPIC_API_KEY'
         ]
         
+        # Optional API keys from env
+        optional_env_vars = [
+            'MOONSHOT_API_KEY'
+        ]
+        
         config_dict = {}
         for var in required_env_vars:
             value = os.getenv(var)
             if not value:
                 raise ValueError(f'Missing required environment variable: {var}')
             config_dict[var.lower()] = value
+        
+        # Load optional API keys (None if not set)
+        for var in optional_env_vars:
+            config_dict[var.lower()] = os.getenv(var)
             
         # Load and merge yaml config if provided
         if yaml_path:

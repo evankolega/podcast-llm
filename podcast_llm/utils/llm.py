@@ -6,8 +6,8 @@ a unified interface. It handles provider-specific implementation details while
 exposing a consistent API for the rest of the application.
 
 Key components:
-- LLMWrapper: A class that wraps different LLM providers (OpenAI, Google, Anthropic)
-  with standardized interfaces for structured output parsing and rate limiting
+- LLMWrapper: A class that wraps different LLM providers (OpenAI, Google, Anthropic,
+  Moonshot/Kimi) with standardized interfaces for structured output parsing and rate limiting
 - Helper functions for configuring and instantiating LLM instances with appropriate
   settings for podcast generation tasks
 
@@ -22,6 +22,7 @@ while still leveraging provider-specific capabilities when beneficial.
 """
 
 import logging
+import os
 import pydantic
 from typing import Any, Optional, Union
 
@@ -54,11 +55,12 @@ class LLMWrapper(Runnable):
         A wrapper class for various LLM providers that standardizes their interfaces.
 
         This class provides a unified interface for working with different LLM providers
-        (OpenAI, Google, Anthropic) while handling provider-specific implementation details.
-        It supports structured output parsing and rate limiting across all providers.
+        (OpenAI, Google, Anthropic, Moonshot/Kimi) while handling provider-specific 
+        implementation details. It supports structured output parsing and rate limiting 
+        across all providers.
 
         Args:
-            provider (str): The LLM provider to use ('openai', 'google', or 'anthropic')
+            provider (str): The LLM provider to use ('openai', 'google', 'anthropic', or 'moonshot')
             model (str): The specific model name/identifier for the chosen provider
             temperature (float, optional): Controls randomness in responses. Defaults to 1.0
             max_tokens (int, optional): Maximum tokens in response. Defaults to 8192
@@ -83,14 +85,26 @@ class LLMWrapper(Runnable):
         provider_to_model = {
             'openai': ChatOpenAI,
             'google': ChatGoogleGenerativeAI,
-            'anthropic': ChatAnthropic
+            'anthropic': ChatAnthropic,
+            'moonshot': ChatOpenAI  # Moonshot uses OpenAI-compatible API
         }
 
         if self.provider not in provider_to_model:
             raise ValueError(f"The LLM provider value '{self.provider}' is not supported.")
 
         model_class = provider_to_model[self.provider]
-        self.llm = model_class(model=self.model, rate_limiter=self.rate_limiter, max_tokens=self.max_tokens)
+        
+        # Moonshot/Kimi uses OpenAI-compatible API with custom base URL
+        if self.provider == 'moonshot':
+            self.llm = model_class(
+                model=self.model, 
+                rate_limiter=self.rate_limiter, 
+                max_tokens=self.max_tokens,
+                base_url="https://api.moonshot.ai/v1",
+                api_key=os.getenv('MOONSHOT_API_KEY')
+            )
+        else:
+            self.llm = model_class(model=self.model, rate_limiter=self.rate_limiter, max_tokens=self.max_tokens)
 
     def coerce_to_schema(self, llm_output: str):
         """
@@ -187,7 +201,7 @@ class LLMWrapper(Runnable):
         This method adapts the underlying LLM to output responses conforming to the provided
         Pydantic model schema. The implementation varies by provider:
 
-        - OpenAI/Anthropic: Uses native structured output support
+        - OpenAI/Anthropic/Moonshot: Uses native structured output support
         - Google: Implements structured output via output parser and format instructions
 
         Args:
@@ -197,7 +211,7 @@ class LLMWrapper(Runnable):
         Returns:
             LLMWrapper: The wrapper instance configured for structured output
         """
-        if self.provider in ('openai', 'anthropic',):
+        if self.provider in ('openai', 'anthropic', 'moonshot'):
             self.llm = self.llm.with_structured_output(schema)
         elif self.provider == 'google':
             self.schema = schema
@@ -265,11 +279,13 @@ def get_long_context_llm(config: PodcastConfig, rate_limiter: BaseRateLimiter | 
     - OpenAI: gpt-4o 
     - Google: gemini-1.5-pro-latest
     - Anthropic: claude-3-5-sonnet
+    - Moonshot: kimi-k2-turbo-preview (Kimi K2 by Moonshot AI)
     """
     long_context_llm_models = {
         'openai': 'gpt-4o',
         'google': 'gemini-1.5-pro-latest',
-        'anthropic': 'claude-3-5-sonnet-20241022'
+        'anthropic': 'claude-3-5-sonnet-20241022',
+        'moonshot': 'kimi-k2-turbo-preview'
     }
 
     if config.long_context_llm_provider not in long_context_llm_models:

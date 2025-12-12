@@ -21,6 +21,21 @@ def test_llm_wrapper_initialization_with_supported_providers():
         assert llm_wrapper_instance.rate_limiter is None
         assert llm_wrapper_instance.llm is not None
 
+
+def test_llm_wrapper_initialization_with_moonshot_provider(monkeypatch):
+    """Test that LLMWrapper initializes correctly with moonshot provider."""
+    monkeypatch.setenv('MOONSHOT_API_KEY', 'test-moonshot-key')
+    llm_wrapper_instance = LLMWrapper(
+        provider='moonshot', 
+        model='kimi-k2-turbo-preview'
+    )
+    assert llm_wrapper_instance.provider == 'moonshot'
+    assert llm_wrapper_instance.model == 'kimi-k2-turbo-preview'
+    assert llm_wrapper_instance.temperature == 1.0
+    assert llm_wrapper_instance.max_tokens == 8192
+    assert llm_wrapper_instance.rate_limiter is None
+    assert llm_wrapper_instance.llm is not None
+
 def test_llm_wrapper_initialization_with_unsupported_provider():
     """Test that LLMWrapper raises ValueError when initialized with an unsupported provider."""
     with pytest.raises(ValueError) as exception_info:
@@ -116,6 +131,21 @@ def test_get_long_context_llm_with_supported_provider():
     assert isinstance(long_context_llm_instance, LLMWrapper)
     assert long_context_llm_instance.provider == 'anthropic'
     assert long_context_llm_instance.model == 'claude-3-5-sonnet-20241022'
+
+
+def test_get_long_context_llm_with_moonshot_provider(monkeypatch):
+    """Test that get_long_context_llm returns an LLMWrapper with Kimi K2 model for moonshot provider."""
+    monkeypatch.setenv('MOONSHOT_API_KEY', 'test-moonshot-key')
+    config_instance = PodcastConfig.load()
+    config_instance.long_context_llm_provider = 'moonshot'
+    rate_limiter_instance = None
+    long_context_llm_instance = get_long_context_llm(
+        config=config_instance, 
+        rate_limiter=rate_limiter_instance
+    )
+    assert isinstance(long_context_llm_instance, LLMWrapper)
+    assert long_context_llm_instance.provider == 'moonshot'
+    assert long_context_llm_instance.model == 'kimi-k2-turbo-preview'
 
 def test_get_long_context_llm_with_unsupported_provider():
     """Test that get_long_context_llm raises ValueError when given an unsupported provider."""
