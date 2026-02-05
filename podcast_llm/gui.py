@@ -35,7 +35,74 @@ from .generate import generate
 PACKAGE_ROOT = Path(__file__).parent
 DEFAULT_CONFIG_PATH = os.path.join(PACKAGE_ROOT, 'config', 'config.yaml')
 
+# Default output directory for GUI-generated files
+DEFAULT_OUTPUT_DIR = Path('./output').resolve()
+
 temp_log_file = tempfile.NamedTemporaryFile(mode='w', delete=False).name
+
+
+class PathTraversalError(ValueError):
+    """Raised when a path traversal attempt is detected."""
+    pass
+
+
+def validate_output_path(user_path: str, allowed_dir: Path = DEFAULT_OUTPUT_DIR) -> Path:
+    """
+    Validate and sanitize a user-provided output file path.
+
+    Ensures the resolved path is within the allowed output directory to prevent
+    path traversal attacks (CWE-22). The function:
+    - Rejects absolute paths
+    - Rejects paths containing '..' components
+    - Ensures the final resolved path is within the allowed directory
+    - Creates the allowed directory if it doesn't exist
+
+    Args:
+        user_path: The user-provided file path (should be a filename or relative path)
+        allowed_dir: The directory where output files must be written
+
+    Returns:
+        Path: The validated, resolved absolute path within the allowed directory
+
+    Raises:
+        PathTraversalError: If the path attempts to escape the allowed directory
+    """
+    if not user_path or not user_path.strip():
+        raise PathTraversalError("Output path cannot be empty")
+
+    user_path = user_path.strip()
+
+    # Reject absolute paths - users should only provide filenames or relative paths
+    if os.path.isabs(user_path):
+        raise PathTraversalError(
+            f"Absolute paths are not allowed. Please provide a filename only (e.g., 'podcast.mp3')"
+        )
+
+    # Reject any path containing '..' to prevent traversal attempts
+    # Check both the raw string and normalized path components
+    path_obj = Path(user_path)
+    if '..' in path_obj.parts:
+        raise PathTraversalError(
+            f"Path traversal sequences ('..') are not allowed. Please provide a filename only."
+        )
+
+    # Ensure the allowed directory exists
+    allowed_dir.mkdir(parents=True, exist_ok=True)
+
+    # Resolve the full path and verify it's within the allowed directory
+    # Use resolve() to get the canonical absolute path
+    full_path = (allowed_dir / user_path).resolve()
+
+    # Security check: ensure the resolved path is still within allowed_dir
+    # This catches edge cases like symlinks or other path manipulation
+    try:
+        full_path.relative_to(allowed_dir.resolve())
+    except ValueError:
+        raise PathTraversalError(
+            f"Invalid output path. Files must be saved within the output directory."
+        )
+
+    return full_path
 
 
 def submit_handler(
@@ -68,6 +135,9 @@ def submit_handler(
 
     Returns:
         None
+
+    Raises:
+        PathTraversalError: If output paths attempt to escape the allowed directory
     """
     setup_logging(log_level=logging.INFO, output_file=temp_log_file)
     # Print values and types of all arguments
@@ -81,8 +151,19 @@ def submit_handler(
     logging.info(f'Text Output: {text_output} (type: {type(text_output)})')
     logging.info(f'Audio Output: {audio_output} (type: {type(audio_output)})')
 
-    text_output_file = text_output.strip() if text_output.strip() else None
-    audio_output_file = audio_output.strip() if audio_output.strip() else None
+    # Validate and sanitize output paths to prevent path traversal attacks (CWE-22)
+    text_output_file = None
+    audio_output_file = None
+
+    if text_output and text_output.strip():
+        validated_text_path = validate_output_path(text_output)
+        text_output_file = str(validated_text_path)
+        logging.info(f'Validated text output path: {text_output_file}')
+
+    if audio_output and audio_output.strip():
+        validated_audio_path = validate_output_path(audio_output)
+        audio_output_file = str(validated_audio_path)
+        logging.info(f'Validated audio output path: {audio_output_file}')
 
     # Split URLs by line and filter out non-URL lines
     source_urls_list = [
